@@ -6,7 +6,7 @@ This project demonstrates how to use Kafka, Debezium, and PySpark for real-time 
 
 - Docker 
 - Basic knowledge of Kafka, PostgreSQL, and PySpark
-- [https://medium.com/@narmadhabts/apache-kafka-25028fb95bfd](url)
+- For kafka you can refer: [https://medium.com/@narmadhabts/apache-kafka-25028fb95bfd](url)
 
 ## Project Structure
 
@@ -40,6 +40,45 @@ Ensure that the table that you are trying to connect in your PostgreSQL database
 ```sql
 ALTER TABLE public.table_name REPLICA IDENTITY FULL;
 ```
+
+For multiple tables use :
+```sql
+DO $$
+DECLARE
+    table_rec RECORD;
+BEGIN
+    FOR table_rec IN
+        SELECT table_name
+        FROM information_schema.tables
+        WHERE table_schema = 'public'
+        AND table_type = 'BASE TABLE'
+        AND table_name NOT LIKE 'pg_%'
+    LOOP
+        EXECUTE format('ALTER TABLE public.%I REPLICA IDENTITY FULL;', table_rec.table_name);
+    END LOOP;
+END $$;
+```
+You can check if it has changed using the following command
+```sql
+SELECT
+    c.relname AS table_name,
+    CASE c.relreplident
+        WHEN 'd' THEN 'DEFAULT'
+        WHEN 'n' THEN 'NOTHING'
+        WHEN 'f' THEN 'FULL'
+        WHEN 'i' THEN 'INDEX'
+        ELSE 'UNKNOWN'
+    END AS replica_identity
+FROM
+    pg_class c
+JOIN
+    pg_namespace n ON n.oid = c.relnamespace
+WHERE
+    n.nspname = 'public'
+    AND c.relkind = 'r'; 
+```
+
+
 ### Step 4: Set Up the Debezium Connector
 >[!IMPORTANT]
 >Update the connection parameters in debezium.json as needed:
@@ -194,8 +233,12 @@ display_thread.start()
 # Await termination of the streaming query
 memory_query.awaitTermination()
 ```
-This code will read changes from the postgres.public.table_name topic in Kafka, process them with PySpark, and display the data in real-time.
+This code will read changes from the postgres.public.table_name topic in Kafka, transforms them with PySpark, and display the data in real-time.
+Transformations done in pyspark :
 
+- white space trimming
+- remove duplicates (no same patient details must be repeated)
+- validating phone number (no phone number longer than 10 digits)
 
 <details>
   <summary>Commands (For reference)</summary>

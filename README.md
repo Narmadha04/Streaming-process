@@ -80,67 +80,118 @@ Open the Jupyter notebook in your browser (usually at http://localhost:8888), yo
 
 ```python
 from pyspark.sql import SparkSession
-from pyspark.sql.functions import from_json, col
-from pyspark.sql.types import StructType, StructField, StringType, IntegerType, LongType
-from IPython.display import clear_output
+from pyspark.sql.functions import from_json, col, trim, to_date, to_timestamp, regexp_replace, when, count, row_number, concat_ws, monotonically_increasing_id, length
+from pyspark.sql.types import StructType, StructField, StringType, LongType, DateType, TimestampType
+from pyspark.sql.window import Window
 import threading
 import time
+from IPython.display import clear_output
 
-#spark session builder
+# Initialize Spark Session
 spark = SparkSession.builder \
     .appName("KafkaSparkConsumer") \
+    .config("spark.jars", "/opt/bitnami/spark/jars/postgresql-42.7.3.jar") \
     .getOrCreate()
 
-#schema of the table
-after_schema = StructType([
-    StructField("patientid", IntegerType(), False),
-    StructField("firstname", StringType(), True),
-    StructField("lastname", StringType(), True),
-    StructField("dob", IntegerType(), True),
-    StructField("gender", StringType(), True),
-    StructField("contactnumber", StringType(), True),
-    StructField("email", StringType(), True),
-    StructField("address", StringType(), True),
-    StructField("city", StringType(), True)
-])
+# JDBC connection parameters
+jdbc_url = "jdbc:postgresql://host.docker.internal:5432/kdb"
+jdbc_properties = {
+    "user": "postgres",
+    "password": "2003",
+    "driver": "org.postgresql.Driver"
+}
 
-#schema of the kafka 
-schema = StructType([
+# Fetch schema from PostgreSQL
+table_name = "public.patients"  # Your table name
+schema_df = spark.read.jdbc(url=jdbc_url, table=table_name, properties=jdbc_properties)
+schema = schema_df.schema
+
+# Define full schema including Kafka metadata
+full_schema = StructType([
     StructField("before", StringType(), True),
-    StructField("after", after_schema, True),
+    StructField("after", schema, True),
     StructField("source", StringType(), True),
     StructField("op", StringType(), True),
     StructField("ts_ms", LongType(), True),
     StructField("transaction", StringType(), True)
 ])
 
+# Read from Kafka
 df = spark.readStream \
     .format("kafka") \
     .option("kafka.bootstrap.servers", "kafka:9092") \
-    .option("subscribe", "postgres.public.table_name") \
+    .option("subscribe", "postgres.public.patients") \
     .option("startingOffsets", "earliest") \
     .load()
 
+# Process Kafka data
 df = df.selectExpr("CAST(value AS STRING) as json_string")
+df = df.select(from_json(col("json_string"), full_schema).alias("data")).select("data.after.*")
 
-df = df.select(from_json(col("json_string"), schema).alias("data")).select("data.after.*")
+# Apply transformations
+def transform_df(df):
+    # Trim all white spaces
+    for column in df.columns:
+        df = df.withColumn(column, trim(col(column)))
+    
+    # Change date columns to Date64 and time columns to datetime
+    for column in df.columns:
+        df = df.withColumn(column, 
+            when(col(column).cast("date").isNotNull(), to_date(col(column)).cast("date"))
+            .when(col(column).cast("timestamp").isNotNull(), to_timestamp(col(column)))
+            .otherwise(col(column))
+        )
+    
+    # Clean phone numbers
+     # Modified phone number cleaning
+    phone_columns = [c for c in df.columns if 'phone' in c.lower() or 'contact' in c.lower()]
+    for column in phone_columns:
+        df = df.withColumn(column, 
+            when(length(regexp_replace(col(column), r'\D', '')) == 10, 
+                 regexp_replace(col(column), r'\D', ''))
+            .otherwise("-")
+        )
+    return df
 
+# Apply transformations to the streaming DataFrame
+df = transform_df(df)
+
+# Write stream to memory
 memory_query = df.writeStream \
     .outputMode("append") \
     .format("memory") \
     .queryName("patients_table") \
     .start()
 
-def display_output(freq=5):
+# Display function to show data periodically
+def display_output(freq=10):
     while True:
         clear_output(wait=True)
         patients_df = spark.sql("SELECT * FROM patients_table")
-        patients_df.show(n=1000, truncate=False)
-        time.sleep(freq)  
+        
+        # Add a new sequential ID column
+        patients_df = patients_df.withColumn("sequential_id", monotonically_increasing_id())
+        
+        # Identify and separate duplicates
+        window = Window.partitionBy(patients_df.columns[1:-1]).orderBy("sequential_id")
+        patients_df = patients_df.withColumn("row_num", row_number().over(window))
+        
+        unique_patients = patients_df.filter(col("row_num") == 1).drop("row_num").orderBy("sequential_id")
+        duplicates = patients_df.filter(col("row_num") > 1).drop("row_num").orderBy("sequential_id")
+        
+        print("Patients Table:")
+        unique_patients.show(n=1000, truncate=False)
+        
+        print("\nDuplicates Table:")
+        duplicates.show(n=1000, truncate=False)
+        
+        time.sleep(freq)
 
+# Run display function in a separate thread
 display_thread = threading.Thread(target=display_output, args=(5,))
 display_thread.start()
 
+# Await termination of the streaming query
 memory_query.awaitTermination()
 ```
 This code will read changes from the postgres.public.table_name topic in Kafka, process them with PySpark, and display the data in real-time.

@@ -6,6 +6,7 @@ This project demonstrates how to use Kafka, Debezium, and PySpark for real-time 
 
 - Docker 
 - Basic knowledge of Kafka, PostgreSQL, and PySpark
+- [https://medium.com/@narmadhabts/apache-kafka-25028fb95bfd](url)
 
 ## Project Structure
 
@@ -20,10 +21,13 @@ You can download the docker-compose.yaml and debezium.json files manually or fol
 Run the following commands to clone the repository and navigate to the project directory:
 
 ```sh
-git clone https://github.com/yourusername/data-analysis.git
-cd data-analysis
+git clone https://github.com/yourusername/directory_name.git
+cd directory_name
 ```
 ### Step 2: Start the Docker Services
+- Open a command prompt or terminal.
+- Navigate to your project directory.
+  
 Run the following command to start the Docker services defined in docker-compose.yaml:
 
 ```sh

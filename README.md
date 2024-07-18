@@ -25,8 +25,9 @@ git clone https://github.com/yourusername/directory_name.git
 cd directory_name
 ```
 ### Step 2: Start the Docker Services
-- Open a command prompt or terminal.
-- Navigate to your project directory.
+>[!NOTE]
+>- Open a command prompt or terminal.
+>- Navigate to your project directory.
   
 Run the following command to start the Docker services defined in docker-compose.yaml:
 
@@ -40,14 +41,15 @@ Ensure that the table that you are trying to connect in your PostgreSQL database
 ALTER TABLE public.table_name REPLICA IDENTITY FULL;
 ```
 ### Step 4: Set Up the Debezium Connector
-Update the connection parameters in debezium.json as needed:
-
-- database.hostname
-- database.port
-- database.user
-- database.password
-- database.dbname
-- table.include.list
+>[!IMPORTANT]
+>Update the connection parameters in debezium.json as needed:
+>
+>- database.hostname
+>- database.port
+>- database.user
+>- database.password
+>- database.dbname
+>- table.include.list
   
 Then, register the connector with Debezium:
 
@@ -60,7 +62,11 @@ List the networks in Docker to see the name of the network:
 ```sh
 docker network ls
 ```
-Consume messages from Kafka to verify that the connector is working replace with your network name which you can find from the output of the previous command:
+Consume messages from Kafka to verify that the connector is working. 
+>[!TIP]
+>Kafka cat, also known as kcat, is a command-line utility that allows users to interact with Apache Kafka topics.
+
+Replace with your network name which you can find from the output of the previous command:
 
 ```sh
 docker run --tty --network network_name confluentinc/cp-kafkacat kafkacat -b kafka:9092 -C -f '%s\n' -t postgres.public.table_name
@@ -68,7 +74,7 @@ docker run --tty --network network_name confluentinc/cp-kafkacat kafkacat -b kaf
 This kafkacat environment should be running to see the changes made in database.
 ### Step 6: Insert Sample Data
 Insert sample data into the public.table_name to generate change events
-
+  
 ### Step 7: Run PySpark Consumer
 Open the Jupyter notebook in your browser (usually at http://localhost:8888), you can find the token in your pyspark logs and create a password in your localhost 8888, and run the PySpark code provided to start consuming Kafka messages:
 

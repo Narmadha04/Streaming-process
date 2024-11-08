@@ -1,0 +1,30 @@
+{
+  "name": "connector",
+  "config": {
+    "connector.class": "io.debezium.connector.postgresql.PostgresConnector",
+    "plugin.name": "pgoutput",
+    "database.hostname": "host.docker.internal",
+    "database.port": "5432",
+    "database.user": "postgres",
+    "database.password": "2003",
+    "database.dbname": "postgres",
+    "database.server.name": "postgres",
+    "table.include.list": "public.patients1",
+    "slot.name": "slottt",
+    "topic.prefix": "postgres",
+    "topic.creation.default.partitions": "6",
+    "topic.creation.default.replication.factor": "1",
+    "transforms": "PartitionRouting,unwrap",
+    "transforms.unwrap.type": "io.debezium.transforms.ExtractNewRecordState",
+    "transforms.unwrap.delete.tombstone.handling.mode": "rewrite-with-tombstone",
+    "transforms.unwrap.drop.tombstones": "false",
+    "transforms.unwrap.add.fields": "table,lsn,ts_ms,op",
+    "transforms.unwrap.add.fields.prefix": "",
+    "transforms.PartitionRouting.type": "io.debezium.transforms.partitions.PartitionRouting",
+    "transforms.PartitionRouting.partition.payload.fields": "change.cityid",
+    "transforms.PartitionRouting.partition.topic.num": "6",
+    "errors.tolerance": "all",
+    "errors.log.enable": "true",
+    "errors.deadletterqueue.topic.name": "dead_letter_queue"
+  }
+}
